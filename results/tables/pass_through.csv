@@ -1,0 +1,10 @@
+stage,input,output,retention_pct
+Pull (WildChat raw),5000,,
+Normalize,5000,4969.0,99.38
+Mine Pass 1 (keyword),4969,867.0,17.45
+Mine Pass 2 (classifier),867,651.0,75.09
+Dedup,651,606.0,93.09
+Label (Python only),606,92.0,15.18
+Split → train,92,69.0,75.0
+Split → val,92,11.0,11.96
+Split → test,92,12.0,13.04

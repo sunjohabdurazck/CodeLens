@@ -1,0 +1,5 @@
+model,mae,rmse,pearson_r,spearman_r
+M1_prompt_features,14.9715,33.9355,-0.1014,0.1907
+M3_code_only,3.8995,4.8016,-0.3408,-0.3216
+M4_teacher,3.9589,4.4796,0.6203,0.718
+M5_student,3.9895,4.4976,0.268,0.1147
