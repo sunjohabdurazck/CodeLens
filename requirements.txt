@@ -1,0 +1,25 @@
+# core ML
+torch>=2.2
+transformers>=4.40
+datasets>=2.19
+scikit-learn>=1.4
+scipy>=1.12
+pandas>=2.2
+numpy>=1.26
+
+# code-side static analysis / ACQP
+pylint>=3.1
+bandit>=1.7
+radon>=6.0
+
+# corpus handling
+huggingface_hub>=0.23
+tqdm
+
+# dev/testing
+pytest
+jupyter
+
+# inference server (for the VS Code extension to call)
+fastapi
+uvicorn

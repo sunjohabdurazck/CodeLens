@@ -1,0 +1,26 @@
+@"
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Data (large, scraped, contains PII)
+data/raw/
+data/interim/
+data/processed/
+data/samples/
+
+# Test/scratch
+fake_preds.json
+my_array.bin
+visited_pages.txt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+"@ | Set-Content .gitignore
