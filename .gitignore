@@ -24,3 +24,7 @@ visited_pages.txt
 .DS_Store
 Thumbs.db
 "@ | Set-Content .gitignore
+node_modules/
+extension/node_modules/
+src/models/teacher/checkpoints/
+src/models/student/checkpoints/
