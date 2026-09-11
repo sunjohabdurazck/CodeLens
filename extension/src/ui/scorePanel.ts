@@ -8,17 +8,14 @@ export function showScorePanel(
   score: number,
   suggestions: string[] = []
 ) {
-  const columnToShowIn = vscode.window.activeTextEditor
-    ? vscode.window.activeTextEditor.viewColumn
-    : undefined;
-
   if (currentPanel) {
-    currentPanel.reveal(columnToShowIn);
+    // Already open — reveal it without stealing focus from the editor.
+    currentPanel.reveal(vscode.ViewColumn.Beside, true);
   } else {
     currentPanel = vscode.window.createWebviewPanel(
       "codelensScore",
       "CodeLens",
-      columnToShowIn ?? vscode.ViewColumn.Beside,
+      vscode.ViewColumn.Beside,     // always split to the right
       { enableScripts: true, retainContextWhenHidden: true }
     );
 
@@ -29,20 +26,32 @@ export function showScorePanel(
       null,
       context.subscriptions
     );
+
+    currentPanel.webview.onDidReceiveMessage(
+      (msg) => {
+        if (msg.command === "applySuggestions") {
+          vscode.window.showInformationMessage("Suggestion applied (demo).");
+        }
+      },
+      null,
+      context.subscriptions
+    );
   }
 
   currentPanel.webview.html = getHtml(prompt, score, suggestions);
 }
 
 function getHtml(prompt: string, score: number, suggestions: string[]): string {
-  // Map the raw ACQP score (0-10) to a 0-100 display value.
-  const pct = Math.max(0, Math.min(100, score * 10));
-  const label = pct >= 70 ? "Good" : pct >= 40 ? "Fair" : "Weak";
-  const color = pct >= 70 ? "#4caf50" : pct >= 40 ? "#ff9800" : "#f44336";
+  // ACQP is on a 0-10 scale. Display it as X.X / 10.
+  // The gauge arc is still drawn using pct (0-100) for the visual fill.
+  const clamped = Math.max(0, Math.min(10, score));
+  const pct = clamped * 10;
+  const label = clamped >= 6.5 ? "Good" : clamped >= 4.0 ? "Fair" : "Weak";
+  const color = clamped >= 6.5 ? "#4caf50" : clamped >= 4.0 ? "#ff9800" : "#f44336";
   const dash = (pct / 100) * 251;  // circumference of r=40 circle ≈ 251
 
   const suggestionsHtml = suggestions.length
-    ? `<ul>${suggestions.map((s) => `<li>${s}</li>`).join("")}</ul>`
+    ? `<ul>${suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
     : `<p><em>No specific suggestions for this prompt.</em></p>`;
 
   return `<!DOCTYPE html>
@@ -83,7 +92,7 @@ function getHtml(prompt: string, score: number, suggestions: string[]): string {
               stroke="${color}" stroke-width="8" stroke-linecap="round"
               stroke-dasharray="${dash} 251"/>
     </svg>
-    <div class="pct">${Math.round(pct)}<span class="pct-total"> /100</span></div>
+    <div class="pct">${clamped.toFixed(1)}<span class="pct-total"> /10</span></div>
     <div class="label">${label}</div>
   </div>
 

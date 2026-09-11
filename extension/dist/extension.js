@@ -11994,28 +11994,34 @@ exports.showScorePanel = showScorePanel;
 const vscode = __webpack_require__(1);
 let currentPanel = undefined;
 function showScorePanel(context, prompt, score, suggestions = []) {
-    const columnToShowIn = vscode.window.activeTextEditor
-        ? vscode.window.activeTextEditor.viewColumn
-        : undefined;
     if (currentPanel) {
-        currentPanel.reveal(columnToShowIn);
+        // Already open — reveal it without stealing focus from the editor.
+        currentPanel.reveal(vscode.ViewColumn.Beside, true);
     }
     else {
-        currentPanel = vscode.window.createWebviewPanel("codelensScore", "CodeLens", columnToShowIn ?? vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
+        currentPanel = vscode.window.createWebviewPanel("codelensScore", "CodeLens", vscode.ViewColumn.Beside, // always split to the right
+        { enableScripts: true, retainContextWhenHidden: true });
         currentPanel.onDidDispose(() => {
             currentPanel = undefined;
+        }, null, context.subscriptions);
+        currentPanel.webview.onDidReceiveMessage((msg) => {
+            if (msg.command === "applySuggestions") {
+                vscode.window.showInformationMessage("Suggestion applied (demo).");
+            }
         }, null, context.subscriptions);
     }
     currentPanel.webview.html = getHtml(prompt, score, suggestions);
 }
 function getHtml(prompt, score, suggestions) {
-    // Map the raw ACQP score (0-10) to a 0-100 display value.
-    const pct = Math.max(0, Math.min(100, score * 10));
-    const label = pct >= 70 ? "Good" : pct >= 40 ? "Fair" : "Weak";
-    const color = pct >= 70 ? "#4caf50" : pct >= 40 ? "#ff9800" : "#f44336";
+    // ACQP is on a 0-10 scale. Display it as X.X / 10.
+    // The gauge arc is still drawn using pct (0-100) for the visual fill.
+    const clamped = Math.max(0, Math.min(10, score));
+    const pct = clamped * 10;
+    const label = clamped >= 6.5 ? "Good" : clamped >= 4.0 ? "Fair" : "Weak";
+    const color = clamped >= 6.5 ? "#4caf50" : clamped >= 4.0 ? "#ff9800" : "#f44336";
     const dash = (pct / 100) * 251; // circumference of r=40 circle ≈ 251
     const suggestionsHtml = suggestions.length
-        ? `<ul>${suggestions.map((s) => `<li>${s}</li>`).join("")}</ul>`
+        ? `<ul>${suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
         : `<p><em>No specific suggestions for this prompt.</em></p>`;
     return `<!DOCTYPE html>
 <html>
@@ -12055,7 +12061,7 @@ function getHtml(prompt, score, suggestions) {
               stroke="${color}" stroke-width="8" stroke-linecap="round"
               stroke-dasharray="${dash} 251"/>
     </svg>
-    <div class="pct">${Math.round(pct)}<span class="pct-total"> /100</span></div>
+    <div class="pct">${clamped.toFixed(1)}<span class="pct-total"> /10</span></div>
     <div class="label">${label}</div>
   </div>
 
@@ -12152,22 +12158,40 @@ async function scoreAndShow(context, prompt) {
         console.error(err);
     }
 }
+/**
+ * Prompt-content heuristics. Each suggestion fires ONLY if the prompt is
+ * actually missing the corresponding signal -- not based on the score.
+ * The score is the model's output; these are independent textual checks.
+ */
 function defaultSuggestions(score, prompt) {
     const out = [];
-    if (score < 5) {
+    const p = prompt.toLowerCase();
+    // 1. Input/output types specified?
+    const hasTypes = /(:|->|→|int\b|str\b|float\b|bool\b|list\b|dict\b|tuple\b|returns?\b|takes\b|input\b|output\b)/.test(p);
+    if (!hasTypes) {
         out.push("Consider specifying expected input and output types.");
+    }
+    // 2. Edge cases mentioned?
+    const hasEdgeCases = /\b(edge|invalid|empty|null|none|error|exception|handle|negative|zero|punctuation|case|whitespace|overflow|boundary)\b/.test(p);
+    if (!hasEdgeCases) {
         out.push("Mention edge cases the generated code should handle.");
     }
-    if (prompt.length < 60) {
-        out.push("Try adding more context about the intended use case.");
-    }
-    if (!/\b(test|example|input|output|return)\b/i.test(prompt)) {
-        out.push("State what the function should return and give an example input.");
-    }
-    if (!/\b(error|invalid|edge|empty|null|negative)\b/i.test(prompt)) {
+    // 3. Explicit error behavior?
+    const hasErrorBehavior = /\b(raise|error|exception|invalid|fail|return none|return -1|raise valueerror|raise typeerror|throw)\b/.test(p);
+    if (!hasErrorBehavior) {
         out.push("Say how the code should behave on invalid or empty input.");
     }
-    return out.length ? out.slice(0, 4) : ["Prompt looks reasonably specified."];
+    // 4. Example provided?
+    const hasExample = /\b(example|e\.g\.|for instance|such as|sample)\b/.test(p);
+    if (!hasExample) {
+        out.push("Include an example input/output to anchor the expected behavior.");
+    }
+    // 5. Prompt too short?
+    if (prompt.length < 60) {
+        out.push("Add more context about the intended use case.");
+    }
+    // Cap at 4 to keep the panel readable
+    return out.length ? out.slice(0, 4) : ["Prompt looks well-specified."];
 }
 function deactivate() { }
 
