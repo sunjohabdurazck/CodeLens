@@ -43,22 +43,49 @@ async function scoreAndShow(context: vscode.ExtensionContext, prompt: string) {
   }
 }
 
+/**
+ * Prompt-content heuristics. Each suggestion fires ONLY if the prompt is
+ * actually missing the corresponding signal -- not based on the score.
+ * The score is the model's output; these are independent textual checks.
+ */
 function defaultSuggestions(score: number, prompt: string): string[] {
   const out: string[] = [];
-  if (score < 5) {
+  const p = prompt.toLowerCase();
+
+  // 1. Input/output types specified?
+  const hasTypes =
+    /(:|->|→|int\b|str\b|float\b|bool\b|list\b|dict\b|tuple\b|returns?\b|takes\b|input\b|output\b)/.test(p);
+  if (!hasTypes) {
     out.push("Consider specifying expected input and output types.");
+  }
+
+  // 2. Edge cases mentioned?
+  const hasEdgeCases =
+    /\b(edge|invalid|empty|null|none|error|exception|handle|negative|zero|punctuation|case|whitespace|overflow|boundary)\b/.test(p);
+  if (!hasEdgeCases) {
     out.push("Mention edge cases the generated code should handle.");
   }
-  if (prompt.length < 60) {
-    out.push("Try adding more context about the intended use case.");
-  }
-  if (!/\b(test|example|input|output|return)\b/i.test(prompt)) {
-    out.push("State what the function should return and give an example input.");
-  }
-  if (!/\b(error|invalid|edge|empty|null|negative)\b/i.test(prompt)) {
+
+  // 3. Explicit error behavior?
+  const hasErrorBehavior =
+    /\b(raise|error|exception|invalid|fail|return none|return -1|raise valueerror|raise typeerror|throw)\b/.test(p);
+  if (!hasErrorBehavior) {
     out.push("Say how the code should behave on invalid or empty input.");
   }
-  return out.length ? out.slice(0, 4) : ["Prompt looks reasonably specified."];
+
+  // 4. Example provided?
+  const hasExample = /\b(example|e\.g\.|for instance|such as|sample)\b/.test(p);
+  if (!hasExample) {
+    out.push("Include an example input/output to anchor the expected behavior.");
+  }
+
+  // 5. Prompt too short?
+  if (prompt.length < 60) {
+    out.push("Add more context about the intended use case.");
+  }
+
+  // Cap at 4 to keep the panel readable
+  return out.length ? out.slice(0, 4) : ["Prompt looks well-specified."];
 }
 
 export function deactivate() {}
