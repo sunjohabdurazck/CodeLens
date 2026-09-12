@@ -10,8 +10,12 @@ WildChat  : conversation_hash, conversation[{role:"user"/"assistant", content}]
 """
 import argparse
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 def normalize_sharegpt(rec: dict) -> dict | None:
@@ -52,6 +56,18 @@ def normalize_wildchat_batch(records: list[dict]) -> list[dict]:
     return out
 
 
+def _iter_json_lines(f, in_path: Path):
+    """Parse each non-empty line as JSON, skipping malformed lines with a warning
+    instead of crashing the whole run."""
+    for line_number, line in enumerate(f, start=1):
+        if not line.strip():
+            continue
+        try:
+            yield json.loads(line)
+        except json.JSONDecodeError as exc:
+            logger.warning("Ligne %d de %s ignorée (JSON invalide) : %s", line_number, in_path, exc)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="in_path", required=True)
@@ -61,26 +77,27 @@ def main():
 
     in_path = Path(args.in_path)
     out_path = Path(args.out_path)
+
+    if not in_path.exists():
+        raise SystemExit(f"Fichier d'entrée introuvable : {in_path}")
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0
     with in_path.open(encoding="utf-8") as f, out_path.open("w", encoding="utf-8") as out:
         if args.format == "sharegpt":
-            for line in f:
-                if not line.strip():
-                    continue
-                rec = json.loads(line)
+            for rec in _iter_json_lines(f, in_path):
                 norm = normalize_sharegpt(rec)
                 if norm:
                     out.write(json.dumps(norm, ensure_ascii=False) + "\n")
                     written += 1
         else:  # wildchat
-            records = [json.loads(l) for l in f if l.strip()]
+            records = list(_iter_json_lines(f, in_path))
             for norm in normalize_wildchat_batch(records):
                 out.write(json.dumps(norm, ensure_ascii=False) + "\n")
                 written += 1
 
-    print(f"Wrote {written} normalized conversations to {out_path}")
+    logger.info("Wrote %d normalized conversations to %s", written, out_path)
 
 
 if __name__ == "__main__":
